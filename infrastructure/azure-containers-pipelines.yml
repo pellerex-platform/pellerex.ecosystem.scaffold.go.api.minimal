@@ -1,0 +1,87 @@
+trigger:
+  - <target-branch>
+
+pool:
+  vmImage: "ubuntu-latest"
+
+variables:
+  - group: PipelineVariables
+  - name: projectName
+    # Matches the .NET reference artifact identity — the release side consumes this name.
+    value: "Pellerex.Ecosystem.ManagedApi.RepoUniqueIdentifier"
+  - name: dockerRepositoryName
+    value: "pellerex/RepoUniqueNormalisedIdentifier"
+  - name: goVersion
+    # Verified against go.dev 2026-07-15 (1.25.11 does not exist; latest 1.25.x is 1.25.9).
+    value: "1.25.9"
+  - name: feed
+    value: "ManagedApiService/External.Latest"
+
+steps:
+  - checkout: self
+    lfs: true
+
+  - task: GoTool@0
+    inputs:
+      version: "$(goVersion)"
+    displayName: "Setup Go $(goVersion)"
+
+  - script: |
+      go version
+      go mod download
+    displayName: "Download Go dependencies"
+
+  - script: |
+      go test -v ./... -coverprofile=coverage.out
+      go tool cover -html=coverage.out -o coverage.html
+    displayName: "Run tests with coverage"
+
+  - script: |
+      go vet ./...
+      go fmt ./...
+      # Check if any files were modified by go fmt
+      if [ -n "$(git status --porcelain)" ]; then
+        echo "Code formatting issues found. Please run 'go fmt ./...'"
+        git diff
+        exit 1
+      fi
+    displayName: "Run linting checks"
+
+  - script: |
+      # Compile every package first (G12 — catches token/import-path mismatches)
+      go build ./...
+      CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o main .
+    displayName: "Build Go application"
+
+  - task: CopyFiles@2
+    inputs:
+      SourceFolder: "infrastructure"
+      Contents: "**"
+      TargetFolder: "$(Build.ArtifactStagingDirectory)"
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathtoPublish: "$(Build.ArtifactStagingDirectory)"
+      artifactName: "$(projectName)"
+    displayName: "Upload Artifacts"
+
+  - task: Docker@2
+    inputs:
+      repository: "$(dockerRepositoryName)"
+      command: "build"
+      Dockerfile: "**/Dockerfile"
+      arguments: "--build-arg PAT=$(PAT)"
+      tags: |
+        latest
+        v1.0.0
+
+  - task: Docker@2
+    displayName: Push
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/<target-branch>')
+    inputs:
+      command: push
+      containerRegistry: "DockerHub"
+      repository: "$(dockerRepositoryName)"
+      tags: |
+        latest
+        v1.0.0

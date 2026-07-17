@@ -1,0 +1,33 @@
+{
+  "environment": "production",
+  "port": "8890",
+  "debug": false,
+  "log_level": "info",
+  "cors_allowed_origins": [
+    "*"
+  ],
+  "cors_allowed_methods": [
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "OPTIONS"
+  ],
+  "cors_allowed_headers": [
+    "Origin",
+    "Content-Type",
+    "Accept",
+    "Authorization",
+    "X-Requested-With"
+  ],
+  "key_vault_name": "<production-keyvault-name>",
+  "tenant_id": "<tenant-id>",
+  "monitoring": {
+    "azure_application_insights_connection_string": "<azure-app-insights-connection-string-in-production>"
+  },
+  "logging": {
+    "file_enabled": true,
+    "file_directory": "/var/log/app",
+    "retention_days": 31
+  }
+}

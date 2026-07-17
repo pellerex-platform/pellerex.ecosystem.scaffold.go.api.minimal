@@ -1,0 +1,30 @@
+# VCS / editor / OS
+**/.git
+**/.gitignore
+**/.dockerignore
+**/.editorconfig
+**/.vscode
+**/.idea
+**/.DS_Store
+*~
+
+# Docs (not needed to build the image)
+**/*.md
+LICENSE
+
+# Deployment / tooling (Helm chart, pipelines, scripts) — not part of the binary
+**/infrastructure
+**/start
+Dockerfile*
+
+# Local secrets / examples — never bake into the image (secrets come from the CSI mount)
+**/secrets.example
+**/.env
+
+# Go build output & test artifacts
+main
+RepoUniqueIdentifier
+RepoUniqueNormalisedIdentifier
+*.exe
+*.test
+*.out

@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "RepoUniqueNormalisedIdentifier.fullname" . }}
+  labels:
+    {{- include "RepoUniqueNormalisedIdentifier.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  strategy: 
+    type: {{ .Values.deploymentStrategy }}
+  selector:
+    matchLabels:
+      {{- include "RepoUniqueNormalisedIdentifier.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        timestamp: "{{ now | date "2006-01-02 15:04:05" }}"
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "RepoUniqueNormalisedIdentifier.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "RepoUniqueNormalisedIdentifier.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          volumeMounts:
+            # Writable log dir for the daily-rolling file sinks under the read-only root FS.
+            - name: log-storage
+              mountPath: {{ .Values.logging.directory | quote }}
+            {{- if .Values.secretProviderClass.enabled }}
+            {{- range $k, $v := .Values.volumeMounts }}
+            - name: {{ $v.name | quote }}
+              mountPath: {{ $v.mountPath | quote }}
+            {{- end }}
+            {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- if .Values.otelCollector.enabled }}
+            # Ship OTLP (traces/metrics/logs) to the in-pod collector sidecar,
+            # which forwards to Azure Monitor via the azuremonitor exporter.
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://localhost:4318"
+            {{- end }}
+            {{- range $k, $v := .Values.env }}
+            - name: {{ $v.name | quote }}
+              value: {{ $v.value | quote }}
+            {{- end }}
+            {{- range $k, $v := .Values.global.envValuesFrom }}
+            - name: {{ $v | quote }}
+              valueFrom:
+                fieldRef:
+                  fieldPath: {{ $v | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8890
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        {{- if .Values.otelCollector.enabled }}
+        # OpenTelemetry Collector sidecar — the App Insights delivery leg (Go has no
+        # in-process App Insights SDK, so OTLP → collector → Azure Monitor, GO-D7).
+        - name: otel-collector
+          image: {{ .Values.otelCollector.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- toYaml .Values.otelCollector.securityContext | nindent 12 }}
+          args: ["--config=/etc/otelcol/config.yaml"]
+          env:
+            - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+              value: {{ .Values.otelCollector.connectionString | quote }}
+          ports:
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+          volumeMounts:
+            - name: otel-collector-config
+              mountPath: /etc/otelcol
+              readOnly: true
+            - name: otel-collector-tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.otelCollector.resources | nindent 12 }}
+        {{- end }}
+      volumes:
+        - name: log-storage
+          emptyDir: {}
+        {{- if .Values.otelCollector.enabled }}
+        - name: otel-collector-config
+          configMap:
+            name: {{ include "RepoUniqueNormalisedIdentifier.fullname" . }}-otel-collector
+        - name: otel-collector-tmp
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.secretProviderClass.enabled }}
+        {{- range $k, $v := .Values.volumes }}
+        - name: {{ $v.name | quote }}
+          {{- if $v.secretRef }}
+          secret:
+            secretName: {{ $v.secretRef | quote }}
+          {{- end }}
+          {{- if $v.csiSecretProviderClass }}
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ $v.csiSecretProviderClass }}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "RepoUniqueNormalisedIdentifier.selectorLabels" . | nindent 14 }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

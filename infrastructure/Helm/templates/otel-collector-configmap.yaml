@@ -1,0 +1,42 @@
+{{- if .Values.otelCollector.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "RepoUniqueNormalisedIdentifier.fullname" . }}-otel-collector
+  labels:
+    {{- include "RepoUniqueNormalisedIdentifier.labels" . | nindent 4 }}
+data:
+  # OpenTelemetry Collector config: receive OTLP from the app and forward
+  # traces, metrics AND logs to Azure Application Insights (GO-D7). The
+  # connection string is injected as an env var on the sidecar container.
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+          grpc:
+            endpoint: 0.0.0.0:4317
+    processors:
+      batch: {}
+    exporters:
+      azuremonitor:
+        connection_string: "${env:APPLICATIONINSIGHTS_CONNECTION_STRING}"
+    service:
+      telemetry:
+        logs:
+          level: warn
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [azuremonitor]
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [azuremonitor]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [azuremonitor]
+{{- end }}

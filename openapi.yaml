@@ -1,0 +1,96 @@
+# Root API spec — the Pellerex Standards scan checks /openapi.yaml (repo root) for its
+# HasApiSpec maturity signal. Keep this in sync with the handlers under handlers/.
+openapi: 3.0.3
+info:
+  title: RepoUniqueNormalisedIdentifier
+  description: Pellerex managed API (Go / Gin minimal scaffold).
+  version: 1.0.0
+servers:
+  - url: http://localhost:8890
+paths:
+  /health/startup:
+    get:
+      summary: Startup probe
+      tags: [Health]
+      responses:
+        "200":
+          description: Application has started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /health/live:
+    get:
+      summary: Liveness probe
+      tags: [Health]
+      responses:
+        "200":
+          description: Application is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /health/ready:
+    get:
+      summary: Readiness probe
+      tags: [Health]
+      responses:
+        "200":
+          description: Configuration loaded; ready to serve traffic. Details report secret-mount state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Not ready (configuration failed to load).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /v1/hello:
+    get:
+      summary: Sample endpoint proving config + secret wiring
+      tags: [Sample]
+      responses:
+        "200":
+          description: Sample response. Reports only WHETHER the database secret was read — never the value.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HelloResponse"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        service:
+          type: string
+        version:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    HelloResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        environment:
+          type: string
+        score:
+          type: integer
+        configuration:
+          type: object
+          additionalProperties: true
+        dbConnectionStringConfigured:
+          type: boolean
