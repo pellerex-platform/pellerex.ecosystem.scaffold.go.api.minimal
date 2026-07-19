@@ -69,7 +69,7 @@ otelCollector:
 imagePullSecrets:
   - name: image-pull-secret
 nameOverride: ""
-fullnameOverride: ""
+fullnameOverride: "<managed-service-name>"
 
 serviceAccount:
   create: false
