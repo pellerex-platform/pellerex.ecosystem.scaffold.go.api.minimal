@@ -40,7 +40,7 @@ fi
 
 # Set environment variables for development
 export ENVIRONMENT=development
-export PORT=8890
+export PORT=<port-number>
 export DEBUG=true
 export LOG_LEVEL=debug
 

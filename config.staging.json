@@ -1,6 +1,6 @@
 {
   "environment": "staging",
-  "port": "8890",
+  "port": "<port-number>",
   "debug": false,
   "log_level": "info",
   "cors_allowed_origins": [

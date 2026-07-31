@@ -10,7 +10,7 @@ env:
   - name: "ENVIRONMENT"
     value: "staging"
   - name: "PORT"
-    value: "8890"
+    value: "<port-number>"
   - name: "GIN_MODE"
     value: "release"
   - name: "LOG_LEVEL"
@@ -94,7 +94,7 @@ securityContext:
 service:
   type: ClusterIP
   port: 80
-  targetPort: 8890
+  targetPort: <port-number>
 
 ingress:
   enabled: true

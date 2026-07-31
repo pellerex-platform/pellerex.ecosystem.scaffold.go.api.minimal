@@ -1,12 +1,12 @@
 {
   "environment": "development",
-  "port": "8890",
+  "port": "<port-number>",
   "debug": true,
   "log_level": "debug",
   "cors_allowed_origins": [
     "http://localhost:3000",
     "http://localhost:8080",
-    "http://localhost:8890"
+    "http://localhost:<port-number>"
   ],
   "cors_allowed_methods": [
     "GET",
