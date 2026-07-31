@@ -10,7 +10,7 @@ env:
   - name: "ENVIRONMENT"
     value: "production"
   - name: "PORT"
-    value: "8890"
+    value: "<port-number>"
   - name: "GIN_MODE"
     value: "release"
   # info, not warn: the per-request "HTTP request" logs are INFO — at warn they would be
@@ -97,7 +97,7 @@ securityContext:
 service:
   type: ClusterIP
   port: 80
-  targetPort: 8890
+  targetPort: <port-number>
 
 ingress:
   enabled: true

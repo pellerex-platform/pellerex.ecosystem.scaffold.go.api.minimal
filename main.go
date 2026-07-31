@@ -22,7 +22,7 @@ import (
 // @title RepoUniqueNormalisedIdentifier
 // @description A minimal, stateless API scaffold built with Go and Gin
 // @version 1.0
-// @host localhost:8890
+// @host localhost:<port-number>
 // @BasePath /
 
 const (

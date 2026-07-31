@@ -1,6 +1,6 @@
 {
   "environment": "qualityassurance",
-  "port": "8890",
+  "port": "<port-number>",
   "debug": true,
   "log_level": "info",
   "cors_allowed_origins": [

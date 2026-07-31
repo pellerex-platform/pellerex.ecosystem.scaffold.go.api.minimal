@@ -77,10 +77,9 @@ func LoadConfig() (*Config, error) {
 	// 1. In-code defaults.
 	cfg := &Config{
 		Environment: environment,
-		// Port is hardcoded to 8890 (matching the minimal .NET scaffold). Go does
-		// NOT use the port-number tokeniser token (which resolves to 9000) for its
-		// port — GO-D5/G1.
-		Port:               "8890",
+		// Port is the <port-number> tokeniser token (GO-D5/G1), provisioned to the
+		// platform port — the same value across every stack and product.
+		Port:               "<port-number>",
 		Debug:              environment != "production",
 		LogLevel:           "info",
 		CORSAllowedOrigins: []string{"*"},

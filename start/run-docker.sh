@@ -3,14 +3,14 @@
 # Go Gin API Docker Runner
 #
 # Usage:
-#   ./run-docker.sh                           # Run in development mode on port 8890
+#   ./run-docker.sh                           # Run in development mode on port <port-number>
 #   ENVIRONMENT=production ./run-docker.sh    # Run in production mode
 #   PORT=3000 ./run-docker.sh                 # Run on custom port
 #   ENVIRONMENT=test PORT=9000 ./run-docker.sh # Custom environment and port
 #
 # Environment variables:
 #   ENVIRONMENT: development (default), production, test
-#   PORT: 8890 (default)
+#   PORT: <port-number> (default)
 
 # Colors for output
 RED='\033[0;31m'
@@ -21,7 +21,7 @@ NC='\033[0m' # No Color
 
 # Environment configuration (can be overridden)
 ENVIRONMENT=${ENVIRONMENT:-development}
-PORT=${PORT:-8890}
+PORT=${PORT:-<port-number>}
 
 echo -e "${BLUE}🐳 Starting RepoUniqueNormalisedIdentifier with Docker...${NC}"
 echo -e "${BLUE}📋 Configuration: Environment=$ENVIRONMENT, Port=$PORT${NC}"

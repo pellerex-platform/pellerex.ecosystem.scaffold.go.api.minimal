@@ -46,12 +46,12 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Expose port
-# Expose the port the app runs on (default 8890, configurable via PORT env var)
-EXPOSE 8890
+# Expose the port the app runs on (the <port-number> token; overridable via PORT env var)
+EXPOSE <port-number>
 
 # Set default environment variables (can be overridden at runtime)
 ENV ENVIRONMENT=development
-ENV PORT=8890
+ENV PORT=<port-number>
 ENV GIN_MODE=debug
 
 # Health check (using configurable port)

@@ -75,14 +75,14 @@ ENVIRONMENT=test PORT=9000 ./start/run-docker.sh
 ```
 
 The API will be available at:
-- **API:** http://localhost:8890
-- **Health Check:** http://localhost:8890/health/startup
-- **Sample Endpoint:** http://localhost:8890/v1/hello
-- **Swagger Documentation:** http://localhost:8890/swagger/index.html
+- **API:** http://localhost:<port-number>
+- **Health Check:** http://localhost:<port-number>/health/startup
+- **Sample Endpoint:** http://localhost:<port-number>/v1/hello
+- **Swagger Documentation:** http://localhost:<port-number>/swagger/index.html
 
 **Backward Compatibility:**
-- http://localhost:8890/api/health/startup
-- http://localhost:8890/api/v1/hello
+- http://localhost:<port-number>/api/health/startup
+- http://localhost:<port-number>/api/v1/hello
 
 ## 📋 Features
 
@@ -124,7 +124,7 @@ The API will be available at:
 ```bash
 # Set environment variables (optional)
 export ENVIRONMENT=development  # development, test, production
-export PORT=8890               # Server port
+export PORT=<port-number>               # Server port
 export DEBUG=true              # Enable debug logging
 export LOG_LEVEL=debug         # Log level
 ```
@@ -234,9 +234,9 @@ docker build -t RepoUniqueNormalisedIdentifier .
 # Run the container with environment configuration
 docker run -d \
     --name RepoUniqueNormalisedIdentifier-api \
-    -p 8890:8890 \
+    -p <port-number>:<port-number> \
     -e ENVIRONMENT=development \
-    -e PORT=8890 \
+    -e PORT=<port-number> \
     -e SECRETS_MOUNT_PATH=/mnt/secrets-store \
     -v ~/.pellerex/secrets/RepoUniqueNormalisedIdentifier:/mnt/secrets-store:ro \
     RepoUniqueNormalisedIdentifier
@@ -289,8 +289,8 @@ Returns hello message with configuration information.
 ```
 
 ### Interactive Documentation
-- **Swagger UI:** http://localhost:8890/swagger/index.html
-- **OpenAPI Spec:** http://localhost:8890/swagger/doc.json
+- **Swagger UI:** http://localhost:<port-number>/swagger/index.html
+- **OpenAPI Spec:** http://localhost:<port-number>/swagger/doc.json
 
 ## ⚙️ Configuration
 
@@ -304,7 +304,7 @@ Returns hello message with configuration information.
 
 ### Environment Variables
 - `ENVIRONMENT` - Environment name (development, test, production)
-- `PORT` - API port (default: 8890)
+- `PORT` - API port (default: <port-number>)
 - `DEBUG` - Enable debug mode (true/false)
 - `LOG_LEVEL` - Logging level (debug, info, warn, error)
 - `CORS_ALLOWED_ORIGINS` - Allowed CORS origins
@@ -349,13 +349,13 @@ go tool cover -html=coverage.out -o coverage.html
 ### Manual Testing
 ```bash
 # Test health endpoint
-curl http://localhost:8890/health/startup
+curl http://localhost:<port-number>/health/startup
 
 # Test API endpoint
-curl http://localhost:8890/v1/hello
+curl http://localhost:<port-number>/v1/hello
 
 # Test with backward compatibility
-curl http://localhost:8890/api/v1/hello
+curl http://localhost:<port-number>/api/v1/hello
 ```
 
 ### Linting and Code Quality
@@ -454,7 +454,7 @@ docker build --no-cache -t RepoUniqueNormalisedIdentifier .
 docker logs RepoUniqueNormalisedIdentifier
 
 # Environment configuration
-ENVIRONMENT=development PORT=8890 ./start/run-docker.sh
+ENVIRONMENT=development PORT=<port-number> ./start/run-docker.sh
 ```
 
 ### Performance Monitoring
@@ -509,8 +509,8 @@ go run .
 ./start/run-docker.sh
 
 # 4. Test endpoints
-curl http://localhost:8890/health/startup
-curl http://localhost:8890/v1/hello
+curl http://localhost:<port-number>/health/startup
+curl http://localhost:<port-number>/v1/hello
 ```
 
 ---
@@ -527,7 +527,7 @@ curl http://localhost:8890/v1/hello
 
 **Environment Configuration:**
 - `ENVIRONMENT`: development, test, production
-- `PORT`: Server port (default: 8890)
+- `PORT`: Server port (default: <port-number>)
 - `LOG_LEVEL`: debug, info, warn, error
 
 ---
