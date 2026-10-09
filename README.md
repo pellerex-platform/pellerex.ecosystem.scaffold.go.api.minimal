@@ -391,6 +391,16 @@ Structured logging via Go's stdlib `log/slog`, fanned out to:
 Every record is enriched with `service.name`, `service.version`, `deployment.environment`; each HTTP
 request is logged with a generated/propagated `X-Correlation-Id`. The minimum level is config-driven.
 
+**Log inside a request with the request's context.** Use `logger.InfoContext(c.Request.Context(), ...)`
+(and `DebugContext`, `WarnContext`, `ErrorContext`), not `logger.Info(...)`. The context carries the
+request's trace id, so the record can be read together with its request in App Insights. A record
+logged without it reaches App Insights but is tied to no request.
+
+**A panic inside a request is logged, not only printed.** `middleware.RecoveryMiddleware` answers 500
+and writes one error record with `exception.type`, `exception.message` and `exception.stacktrace`,
+under the request's trace id. It is registered after `LoggingMiddleware` (see `newRouter` in
+`main.go`), so the request that crashed still gets its `HTTP request` line, with status 500.
+
 ### App Insights delivery (GO-D7)
 Go has no in-process App Insights SDK, so telemetry flows **app → OTLP → OpenTelemetry Collector →
 Azure Monitor**. The Helm chart runs the Collector as a **sidecar** (`otelCollector.enabled: true`)
