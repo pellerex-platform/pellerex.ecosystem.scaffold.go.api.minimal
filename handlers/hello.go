@@ -52,8 +52,9 @@ func HelloHandler(cfg *config.Config, logger *slog.Logger) gin.HandlerFunc {
 			DbConnectionStringConfigured: secrets.HasDatabaseSecret(cfg.Secrets),
 		}
 
-		// Log the request
-		logger.Info("Hello endpoint accessed",
+		// Log with the request's context, so the record carries the request's
+		// trace id and can be read together with its request
+		logger.InfoContext(c.Request.Context(), "Hello endpoint accessed",
 			"endpoint", "/v1/hello",
 			"version", "1.0",
 			"client_ip", c.ClientIP(),
