@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"RepoUniqueNormalisedIdentifier/config"
+	"RepoUniqueNormalisedIdentifier/observability"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -25,12 +26,18 @@ const (
 	CorrelationIDHeader = "X-Correlation-Id"
 	// CorrelationIDKey is the gin context key the id is stored under.
 	CorrelationIDKey = "correlation_id"
+	// maxCorrelationIDLength is the longest correlation id taken from a caller as sent.
+	maxCorrelationIDLength = 128
 )
 
 // LoggingMiddleware logs each request completion with slog, enriched with a
 // correlation id (taken from the inbound header or generated, and echoed on the
 // response) — the Go analogue of .NET's LogContextEnrichment +
 // UseSerilogRequestLogging.
+//
+// The id also goes into the request's context, so every record logged with
+// c.Request.Context() while the request is served carries it, not only the
+// request line.
 //
 // The attribute names are a CONTRACT with the Pellerex portal's Logs tab: its
 // KQL reads customDimensions.RequestMethod / RequestPath / StatusCode /
@@ -44,11 +51,12 @@ func LoggingMiddleware(logger *slog.Logger, cfg *config.Config) gin.HandlerFunc 
 		start := time.Now()
 
 		correlationID := c.GetHeader(CorrelationIDHeader)
-		if correlationID == "" {
+		if !isAcceptableCorrelationID(correlationID) {
 			correlationID = uuid.NewString()
 		}
 		c.Set(CorrelationIDKey, correlationID)
 		c.Writer.Header().Set(CorrelationIDHeader, correlationID)
+		c.Request = c.Request.WithContext(observability.WithCorrelationID(c.Request.Context(), correlationID))
 
 		c.Next()
 
@@ -68,6 +76,29 @@ func LoggingMiddleware(logger *slog.Logger, cfg *config.Config) gin.HandlerFunc 
 			slog.String("MachineName", machineName),
 		)
 	}
+}
+
+// isAcceptableCorrelationID reports whether a caller's correlation id is taken
+// as sent. The id comes from outside and is written to the logs and to the
+// reply, so only a short run of ASCII letters, digits, hyphens, underscores and
+// dots is. Any other is replaced with a new one.
+func isAcceptableCorrelationID(correlationID string) bool {
+	if correlationID == "" || len(correlationID) > maxCorrelationIDLength {
+		return false
+	}
+
+	for i := 0; i < len(correlationID); i++ {
+		character := correlationID[i]
+		isLetterOrDigit := (character >= 'a' && character <= 'z') ||
+			(character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9')
+
+		if !isLetterOrDigit && character != '-' && character != '_' && character != '.' {
+			return false
+		}
+	}
+
+	return true
 }
 
 // RecoveryMiddleware turns a panic inside a request into a 500 response and

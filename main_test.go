@@ -14,6 +14,7 @@ import (
 	"RepoUniqueNormalisedIdentifier/observability"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	otellog "go.opentelemetry.io/otel/log"
@@ -242,4 +243,131 @@ func TestHandlerLogLinesCarryTheirRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The header and the attribute the correlation id travels under are written out
+// here on purpose: the platform's proxy sends the one and the portal's Logs tab
+// reads the other by these exact names, so a rename must fail a test.
+const (
+	correlationIDHeader    = "X-Correlation-Id"
+	correlationIDAttribute = "CorrelationId"
+)
+
+// correlationIDs returns every value an exported record holds under the
+// correlation id's attribute name.
+func correlationIDs(record sdklog.Record) []string {
+	var values []string
+	record.WalkAttributes(func(pair otellog.KeyValue) bool {
+		if pair.Key == correlationIDAttribute {
+			values = append(values, pair.Value.AsString())
+		}
+		return true
+	})
+	return values
+}
+
+// expectCorrelationID fails unless the record with the given message carries
+// the id.
+func expectCorrelationID(t *testing.T, logs *recordedLogs, message string, expected string) {
+	t.Helper()
+	ids := correlationIDs(logs.find(t, message))
+	if len(ids) != 1 || ids[0] != expected {
+		t.Errorf("expected the record %q to carry the correlation id %q, got %q", message, expected, ids)
+	}
+}
+
+// callHello calls the sample endpoint, with the given correlation id when it is
+// not empty, and returns the id on the reply.
+func callHello(router *gin.Engine, sent string) string {
+	request := httptest.NewRequest(http.MethodGet, "/v1/hello", nil)
+	if sent != "" {
+		request.Header.Set(correlationIDHeader, sent)
+	}
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	return response.Header().Get(correlationIDHeader)
+}
+
+func TestCallersCorrelationIDIsReturnedAndOnEveryLineOfTheRequest(t *testing.T) {
+	// One of every kind of character an id may hold, with both ends of each range
+	const sent = "azAZ09-_.Order-42"
+	router, _, logs := newTestRouter(t, gin.ReleaseMode)
+
+	if returned := callHello(router, sent); returned != sent {
+		t.Errorf("expected the reply to carry the caller's id %q, got %q", sent, returned)
+	}
+
+	expectCorrelationID(t, logs, "HTTP request", sent)
+	expectCorrelationID(t, logs, "Hello endpoint accessed", sent)
+}
+
+func TestCallWithoutCorrelationIDIsGivenANewOne(t *testing.T) {
+	router, _, logs := newTestRouter(t, gin.ReleaseMode)
+
+	returned := callHello(router, "")
+	if _, err := uuid.Parse(returned); err != nil {
+		t.Fatalf("expected the reply to carry a new id, got %q", returned)
+	}
+
+	expectCorrelationID(t, logs, "HTTP request", returned)
+	expectCorrelationID(t, logs, "Hello endpoint accessed", returned)
+}
+
+func TestLongestCorrelationIDTakenAsSentHas128Characters(t *testing.T) {
+	sent := strings.Repeat("a", 128)
+	router, _, logs := newTestRouter(t, gin.ReleaseMode)
+
+	if returned := callHello(router, sent); returned != sent {
+		t.Errorf("expected an id of 128 characters to be taken as sent, got %q", returned)
+	}
+
+	expectCorrelationID(t, logs, "HTTP request", sent)
+}
+
+func TestCorrelationIDThatIsNotSafeToLogIsReplaced(t *testing.T) {
+	cases := []struct {
+		name string
+		sent string
+	}{
+		{name: "longer than 128 characters", sent: strings.Repeat("a", 129)},
+		{name: "a space", sent: "abc def"},
+		{name: "two ids in one header", sent: "abc,abc"},
+		{name: "a line break", sent: "abc\ndef"},
+		{name: "a character outside ASCII", sent: "abc\u00efdef"},
+		{name: "markup", sent: "<script>"},
+		{name: "the character before the digits", sent: "abc/def"},
+		{name: "the character after the digits", sent: "abc:def"},
+		{name: "the character before the capital letters", sent: "abc@def"},
+		{name: "the character after the capital letters", sent: "abc[def"},
+		{name: "the character before the small letters", sent: "abc`def"},
+		{name: "the character after the small letters", sent: "abc{def"},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			router, _, logs := newTestRouter(t, gin.ReleaseMode)
+
+			returned := callHello(router, testCase.sent)
+			if _, err := uuid.Parse(returned); err != nil {
+				t.Fatalf("expected the reply to carry a new id, got %q", returned)
+			}
+
+			expectCorrelationID(t, logs, "HTTP request", returned)
+			expectCorrelationID(t, logs, "Hello endpoint accessed", returned)
+		})
+	}
+}
+
+func TestPanicRecordCarriesTheRequestsCorrelationID(t *testing.T) {
+	const sent = "panic-7"
+	captureGinOutput(t)
+	router, _, logs := newTestRouter(t, gin.ReleaseMode)
+	router.GET("/boom", func(*gin.Context) { panic("boom") })
+
+	request := httptest.NewRequest(http.MethodGet, "/boom", nil)
+	request.Header.Set(correlationIDHeader, sent)
+	router.ServeHTTP(httptest.NewRecorder(), request)
+
+	expectCorrelationID(t, logs, "Unhandled panic in request", sent)
+	expectCorrelationID(t, logs, "HTTP request", sent)
 }
