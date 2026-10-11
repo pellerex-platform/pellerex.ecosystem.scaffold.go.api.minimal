@@ -1,9 +1,13 @@
 package middleware
 
 import (
+	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"RepoUniqueNormalisedIdentifier/config"
@@ -11,6 +15,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -63,6 +68,50 @@ func LoggingMiddleware(logger *slog.Logger, cfg *config.Config) gin.HandlerFunc 
 			slog.String("MachineName", machineName),
 		)
 	}
+}
+
+// RecoveryMiddleware turns a panic inside a request into a 500 response and
+// writes it to every log sink, tied to the request it happened in. gin's own
+// Recovery only prints the panic to stderr, which never reaches Azure Monitor.
+// This keeps gin's recovery (a broken client connection is still left alone) and
+// replaces what happens next: one error record with the OpenTelemetry exception
+// attributes (exception.type / exception.message / exception.stacktrace), logged
+// with the request's context so it shares the request's trace id, and the same
+// error recorded on the request's span.
+//
+// Register it AFTER LoggingMiddleware. The panic is then handled before the
+// request line is written, so a request that crashed still gets its
+// "HTTP request" record, with StatusCode 500.
+func RecoveryMiddleware(logger *slog.Logger) gin.HandlerFunc {
+	// In debug mode (a developer's machine) gin also keeps printing the panic and
+	// its stack to stderr in readable form. Deployed, the structured record is the only copy.
+	var readablePanic io.Writer
+	if gin.IsDebugging() {
+		readablePanic = gin.DefaultErrorWriter
+	}
+
+	return gin.CustomRecoveryWithWriter(readablePanic, func(c *gin.Context, recovered any) {
+		err, isError := recovered.(error)
+		if !isError {
+			err = fmt.Errorf("%v", recovered)
+		}
+
+		ctx := c.Request.Context()
+
+		// otelgin marks the span as failed from the 500 status, so only the error itself is added here
+		trace.SpanFromContext(ctx).RecordError(err, trace.WithStackTrace(true))
+
+		logger.LogAttrs(ctx, slog.LevelError, "Unhandled panic in request",
+			slog.String("exception.type", fmt.Sprintf("%T", recovered)),
+			slog.String("exception.message", err.Error()),
+			slog.String("exception.stacktrace", string(debug.Stack())),
+			slog.String("RequestMethod", c.Request.Method),
+			slog.String("RequestPath", c.Request.URL.Path),
+			slog.String("CorrelationId", c.GetString(CorrelationIDKey)),
+		)
+
+		c.AbortWithStatus(http.StatusInternalServerError)
+	})
 }
 
 // CORSMiddleware creates a CORS middleware with configurable origins

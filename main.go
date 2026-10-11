@@ -97,27 +97,7 @@ func main() {
 	defer logCleanup()
 
 	// Initialize Gin router
-	router := gin.New()
-
-	// Add middleware
-	router.Use(otelgin.Middleware(serviceName))
-	router.Use(gin.Recovery())
-	router.Use(middleware.LoggingMiddleware(logger, cfg))
-	router.Use(middleware.CORSMiddleware())
-
-	// Health check endpoints (at root level)
-	health := router.Group("/health")
-	{
-		health.GET("/startup", handlers.StartupHealthCheck(cfg, logger))
-		health.GET("/live", handlers.LivenessHealthCheck(cfg, logger))
-		health.GET("/ready", handlers.ReadinessHealthCheck(cfg, logger))
-	}
-
-	// API v1 endpoints (at root level)
-	v1 := router.Group("/v1")
-	{
-		v1.GET("/hello", handlers.HelloHandler(cfg, logger))
-	}
+	router := newRouter(cfg, logger)
 
 	// Create HTTP server with proper timeouts
 	server := &http.Server{
@@ -163,4 +143,37 @@ func main() {
 	if err := otelShutdown(shutdownCtx); err != nil {
 		logger.Error("Telemetry shutdown error", "error", err)
 	}
+}
+
+// newRouter builds the gin engine with its middleware and routes.
+//
+// The middleware order matters. otelgin is outermost: it starts the request's
+// span, and every log call made with the request's context below it carries that
+// span's trace id. LoggingMiddleware sits outside RecoveryMiddleware, so a panic
+// is turned into a 500 before the request line is written and a request that
+// crashed still gets its "HTTP request" record.
+func newRouter(cfg *config.Config, logger *slog.Logger) *gin.Engine {
+	router := gin.New()
+
+	// Add middleware
+	router.Use(otelgin.Middleware(serviceName))
+	router.Use(middleware.LoggingMiddleware(logger, cfg))
+	router.Use(middleware.RecoveryMiddleware(logger))
+	router.Use(middleware.CORSMiddleware())
+
+	// Health check endpoints (at root level)
+	health := router.Group("/health")
+	{
+		health.GET("/startup", handlers.StartupHealthCheck(cfg, logger))
+		health.GET("/live", handlers.LivenessHealthCheck(cfg, logger))
+		health.GET("/ready", handlers.ReadinessHealthCheck(cfg, logger))
+	}
+
+	// API v1 endpoints (at root level)
+	v1 := router.Group("/v1")
+	{
+		v1.GET("/hello", handlers.HelloHandler(cfg, logger))
+	}
+
+	return router
 }

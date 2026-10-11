@@ -45,7 +45,7 @@ func StartupHealthCheck(cfg *config.Config, logger *slog.Logger) gin.HandlerFunc
 			Details:   details,
 		}
 
-		logger.Debug("Startup health check accessed")
+		logger.DebugContext(c.Request.Context(), "Startup health check accessed")
 		c.JSON(http.StatusOK, response)
 	}
 }
@@ -67,7 +67,7 @@ func LivenessHealthCheck(cfg *config.Config, logger *slog.Logger) gin.HandlerFun
 			Version:   "1.0.0",
 		}
 
-		logger.Debug("Liveness health check accessed")
+		logger.DebugContext(c.Request.Context(), "Liveness health check accessed")
 		c.JSON(http.StatusOK, response)
 	}
 }
@@ -124,7 +124,7 @@ func ReadinessHealthCheck(cfg *config.Config, logger *slog.Logger) gin.HandlerFu
 			Details:   details,
 		}
 
-		logger.Debug("Readiness health check accessed", "ready", isReady)
+		logger.DebugContext(c.Request.Context(), "Readiness health check accessed", "ready", isReady)
 		c.JSON(httpStatus, response)
 	}
 }
