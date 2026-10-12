@@ -84,7 +84,7 @@ func LoadConfig() (*Config, error) {
 		LogLevel:           "info",
 		CORSAllowedOrigins: []string{"*"},
 		CORSAllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		CORSAllowedHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
+		CORSAllowedHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With", "X-Correlation-Id"},
 		Logging: LoggingConfig{
 			FileEnabled:   true,
 			FileDirectory: "logs",
