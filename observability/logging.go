@@ -38,7 +38,8 @@ type LogConfig struct {
 // structured JSON to stdout (console, always); daily-rolling text + JSON files
 // under FileDirectory (when FileEnabled); and Azure Monitor via the OpenTelemetry
 // logs bridge (when OTelEnabled). Every record is enriched with
-// service.name/version + deployment.environment (the standing enrichers), and the
+// service.name/version + deployment.environment (the standing enrichers), a record
+// logged with a request's context also carries that request's correlation id, and the
 // minimum level is config-driven. The returned func flushes/closes the file
 // sinks and must be called on shutdown (no-op when no files are open).
 func NewLogger(cfg LogConfig) (*slog.Logger, func()) {
@@ -70,7 +71,7 @@ func NewLogger(cfg LogConfig) (*slog.Logger, func()) {
 		handlers = append(handlers, otelslog.NewHandler(cfg.ServiceName))
 	}
 
-	logger := slog.New(newFanoutHandler(handlers...)).With(
+	logger := slog.New(&correlationHandler{next: newFanoutHandler(handlers...)}).With(
 		slog.String("service.name", cfg.ServiceName),
 		slog.String("service.version", cfg.ServiceVersion),
 		slog.String("deployment.environment", cfg.Environment),
@@ -97,6 +98,61 @@ func parseLevel(s string) slog.Level {
 	default:
 		return slog.LevelInfo
 	}
+}
+
+// correlationIDAttribute is the name a request's correlation id is logged under.
+// The Pellerex portal's Logs tab reads it by this exact name.
+const correlationIDAttribute = "CorrelationId"
+
+type correlationIDContextKey struct{}
+
+// WithCorrelationID returns a context that carries a request's correlation id.
+// Every record logged with that context carries the id, so every line written
+// while a request is served can be found by the request's id.
+func WithCorrelationID(ctx context.Context, correlationID string) context.Context {
+	return context.WithValue(ctx, correlationIDContextKey{}, correlationID)
+}
+
+// correlationHandler adds the correlation id a record's context carries to the
+// record (the Go analogue of the .NET scaffold pushing CorrelationId onto the
+// log context). A record logged with no such context is passed on as it is, and
+// so is a record that names the id itself, as the request line does. Inside a
+// group opened with WithGroup the id is written under that group, like the
+// record's other attributes.
+type correlationHandler struct {
+	next slog.Handler
+}
+
+func (h *correlationHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.next.Enabled(ctx, level)
+}
+
+func (h *correlationHandler) Handle(ctx context.Context, r slog.Record) error {
+	correlationID, carried := ctx.Value(correlationIDContextKey{}).(string)
+	if carried && !hasAttribute(r, correlationIDAttribute) {
+		// Clone: a Record that was handed to Handle must not be modified in place.
+		r = r.Clone()
+		r.AddAttrs(slog.String(correlationIDAttribute, correlationID))
+	}
+	return h.next.Handle(ctx, r)
+}
+
+// hasAttribute reports whether the record itself holds an attribute of that name.
+func hasAttribute(r slog.Record, name string) bool {
+	found := false
+	r.Attrs(func(attribute slog.Attr) bool {
+		found = attribute.Key == name
+		return !found
+	})
+	return found
+}
+
+func (h *correlationHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &correlationHandler{next: h.next.WithAttrs(attrs)}
+}
+
+func (h *correlationHandler) WithGroup(name string) slog.Handler {
+	return &correlationHandler{next: h.next.WithGroup(name)}
 }
 
 // fanoutHandler dispatches each record to every wrapped handler — the slog

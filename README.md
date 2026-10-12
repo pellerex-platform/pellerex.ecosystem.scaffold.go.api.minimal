@@ -388,13 +388,18 @@ Structured logging via Go's stdlib `log/slog`, fanned out to:
 3. **Azure Application Insights** — every record is bridged to OpenTelemetry logs and exported
    (alongside traces + metrics) to App Insights.
 
-Every record is enriched with `service.name`, `service.version`, `deployment.environment`; each HTTP
-request is logged with a generated/propagated `X-Correlation-Id`. The minimum level is config-driven.
+Every record is enriched with `service.name`, `service.version`, `deployment.environment`. The
+minimum level is config-driven.
+
+**Every request has a correlation id.** A caller's `X-Correlation-Id` is taken as sent when it is at
+most 128 characters of ASCII letters, digits, hyphens, underscores and dots. Any other, or none, is
+replaced with a new one. The id goes back on the reply in the same header, and every record logged
+with the request's context carries it as `CorrelationId`.
 
 **Log inside a request with the request's context.** Use `logger.InfoContext(c.Request.Context(), ...)`
 (and `DebugContext`, `WarnContext`, `ErrorContext`), not `logger.Info(...)`. The context carries the
-request's trace id, so the record can be read together with its request in App Insights. A record
-logged without it reaches App Insights but is tied to no request.
+request's trace id and its correlation id, so the record can be read together with its request in
+App Insights. A record logged without it reaches App Insights but is tied to no request.
 
 **A panic inside a request is logged, not only printed.** `middleware.RecoveryMiddleware` answers 500
 and writes one error record with `exception.type`, `exception.message` and `exception.stacktrace`,
