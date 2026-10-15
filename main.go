@@ -12,6 +12,7 @@ import (
 
 	"RepoUniqueNormalisedIdentifier/config"
 	"RepoUniqueNormalisedIdentifier/handlers"
+	"RepoUniqueNormalisedIdentifier/health"
 	"RepoUniqueNormalisedIdentifier/middleware"
 	"RepoUniqueNormalisedIdentifier/observability"
 
@@ -96,8 +97,18 @@ func main() {
 	slog.SetDefault(logger)
 	defer logCleanup()
 
+	// The health test: straight away and then once a minute it tests every check
+	// given here, and the health addresses answer from its last result. A new app
+	// has nothing to test. Add a check when the app gains something it cannot work
+	// without, for example its database:
+	//
+	//	health.NewTester(logger, health.Check{Name: "database", Test: database.PingContext})
+	healthTester := health.NewTester(logger)
+	healthTestContext, stopHealthTest := context.WithCancel(ctx)
+	go healthTester.Run(healthTestContext)
+
 	// Initialize Gin router
-	router := newRouter(cfg, logger)
+	router := newRouter(cfg, logger, healthTester)
 
 	// Create HTTP server with proper timeouts
 	server := &http.Server{
@@ -127,6 +138,7 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down server...")
+	stopHealthTest()
 
 	// Create shutdown context with timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -152,21 +164,25 @@ func main() {
 // span's trace id. LoggingMiddleware sits outside RecoveryMiddleware, so a panic
 // is turned into a 500 before the request line is written and a request that
 // crashed still gets its "HTTP request" record.
-func newRouter(cfg *config.Config, logger *slog.Logger) *gin.Engine {
+func newRouter(cfg *config.Config, logger *slog.Logger, healthTester *health.Tester) *gin.Engine {
 	router := gin.New()
 
-	// Add middleware
-	router.Use(otelgin.Middleware(serviceName))
+	// Add middleware. A call to a health address gets no span: Application Insights
+	// keeps each request's span as a request record, and the health test writes its
+	// own line.
+	router.Use(otelgin.Middleware(serviceName, otelgin.WithFilter(func(request *http.Request) bool {
+		return !middleware.IsHealthPath(request.URL.Path)
+	})))
 	router.Use(middleware.LoggingMiddleware(logger, cfg))
 	router.Use(middleware.RecoveryMiddleware(logger))
 	router.Use(middleware.CORSMiddleware())
 
 	// Health check endpoints (at root level)
-	health := router.Group("/health")
+	healthRoutes := router.Group("/health")
 	{
-		health.GET("/startup", handlers.StartupHealthCheck(cfg, logger))
-		health.GET("/live", handlers.LivenessHealthCheck(cfg, logger))
-		health.GET("/ready", handlers.ReadinessHealthCheck(cfg, logger))
+		healthRoutes.GET("/startup", handlers.StartupHealthCheck(healthTester))
+		healthRoutes.GET("/live", handlers.LivenessHealthCheck(healthTester))
+		healthRoutes.GET("/ready", handlers.ReadinessHealthCheck(healthTester))
 	}
 
 	// API v1 endpoints (at root level)

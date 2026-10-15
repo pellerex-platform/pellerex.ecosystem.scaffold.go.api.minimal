@@ -164,6 +164,8 @@ go-gin.api.scaffold.minimal/
 ├── handlers/                  # HTTP request handlers
 │   ├── health.go             # Health check endpoints
 │   └── hello.go              # API v1 endpoints
+├── health/                    # Health test
+│   └── tester.go             # Runs the checks once a minute, keeps the result
 ├── config/                    # Configuration management
 │   ├── config.go             # Config loading and validation
 │   ├── config.dev.json       # Development configuration
@@ -244,26 +246,21 @@ docker run -d \
 
 ## 🏥 Health Checks
 
-The API provides three health check endpoints for orchestration:
+The API runs a health test straight away and then once a minute, and answers three addresses from its last result with one word: `Healthy` (200) or `Unhealthy` (503).
 
-- **Startup:** `GET /health/startup` - Application initialization status
-- **Liveness:** `GET /health/live` - Application responsiveness  
-- **Readiness:** `GET /health/ready` - Ready to serve traffic
+- **Startup:** `GET /health/startup` - `Healthy` once the first test has finished, whatever it found
+- **Liveness:** `GET /health/live` - `Healthy` when the last test passed
+- **Readiness:** `GET /health/ready` - `Healthy` when the last test passed
 
-**Backward Compatibility:**
-- `GET /api/health/startup`
-- `GET /api/health/live` 
-- `GET /api/health/ready`
+Each test writes one log line, for example `Health test passed: database 12 ms` or `Health test failed: database failed after 10000 ms (did not answer within 10000 ms)`. What failed and why is in that line only, never in the answer. Requests to the three addresses write no request line and get no trace span, so they add no request record to Application Insights.
 
-Example response:
-```json
-{
-  "status": "alive",
-  "timestamp": "2024-09-05T10:30:00Z",
-  "service": "RepoUniqueNormalisedIdentifier",
-  "version": "1.0.0"
-}
+A new app has nothing to test. When it gains something it cannot work without, give the check to the tester `main.go` builds:
+
+```go
+healthTester := health.NewTester(logger, health.Check{Name: "database", Test: database.PingContext})
 ```
+
+The chart's Kubernetes checks act on the test: the pod is taken out of traffic after two failed checks in a row (about two minutes) and restarted after five (about 5 minutes).
 
 ## 📚 API Documentation
 

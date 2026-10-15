@@ -30,10 +30,26 @@ const (
 	maxCorrelationIDLength = 128
 )
 
+// healthPaths are the health addresses (handlers/health.go). Kubernetes calls them
+// once a minute and the health test writes its own line, so a request line or a
+// request record for them would only repeat it.
+var healthPaths = map[string]bool{
+	"/health/startup": true,
+	"/health/live":    true,
+	"/health/ready":   true,
+}
+
+// IsHealthPath reports whether path is one of the health addresses. A call to one
+// writes no request line (LoggingMiddleware) and gets no span (newRouter in
+// main.go), which Application Insights would keep as a request record.
+func IsHealthPath(path string) bool {
+	return healthPaths[path]
+}
+
 // LoggingMiddleware logs each request completion with slog, enriched with a
 // correlation id (taken from the inbound header or generated, and echoed on the
 // response) — the Go analogue of .NET's LogContextEnrichment +
-// UseSerilogRequestLogging.
+// UseSerilogRequestLogging. Requests to the health addresses write no line.
 //
 // The id also goes into the request's context, so every record logged with
 // c.Request.Context() while the request is served carries it, not only the
@@ -59,6 +75,10 @@ func LoggingMiddleware(logger *slog.Logger, cfg *config.Config) gin.HandlerFunc 
 		c.Request = c.Request.WithContext(observability.WithCorrelationID(c.Request.Context(), correlationID))
 
 		c.Next()
+
+		if IsHealthPath(c.Request.URL.Path) {
+			return
+		}
 
 		_, clientPort, _ := net.SplitHostPort(c.Request.RemoteAddr)
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"RepoUniqueNormalisedIdentifier/config"
+	"RepoUniqueNormalisedIdentifier/health"
 	"RepoUniqueNormalisedIdentifier/observability"
 
 	"github.com/gin-gonic/gin"
@@ -55,6 +56,13 @@ func (r *recordedLogs) find(t *testing.T, message string) sdklog.Record {
 	}
 	t.Fatalf("no record with the message %q was exported", message)
 	return sdklog.Record{}
+}
+
+// count returns how many records have been exported so far.
+func (r *recordedLogs) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.records)
 }
 
 // attribute returns the value of one attribute of an exported record.
@@ -112,8 +120,12 @@ func newTestRouter(t *testing.T, mode string) (*gin.Engine, *tracetest.InMemoryE
 	})
 	t.Cleanup(closeLogger)
 
+	// The health test runs once, so the health addresses have a result to answer from
+	healthTester := health.NewTester(logger)
+	healthTester.Test(context.Background())
+
 	cfg := &config.Config{Environment: "development", Port: "8080", LogLevel: "debug"}
-	return newRouter(cfg, logger), spans, logs
+	return newRouter(cfg, logger, healthTester), spans, logs
 }
 
 // requestSpan returns the one span a single request produces.
@@ -215,9 +227,6 @@ func TestHandlerLogLinesCarryTheirRequest(t *testing.T) {
 		message string
 	}{
 		{path: "/v1/hello", message: "Hello endpoint accessed"},
-		{path: "/health/live", message: "Liveness health check accessed"},
-		{path: "/health/startup", message: "Startup health check accessed"},
-		{path: "/health/ready", message: "Readiness health check accessed"},
 	}
 
 	for _, testCase := range cases {
@@ -370,4 +379,43 @@ func TestPanicRecordCarriesTheRequestsCorrelationID(t *testing.T) {
 
 	expectCorrelationID(t, logs, "Unhandled panic in request", sent)
 	expectCorrelationID(t, logs, "HTTP request", sent)
+}
+
+// Kubernetes calls the health addresses once a minute and the health test writes
+// its own line, so a call to them writes nothing: no request line, no span (which
+// Application Insights would keep as a request record), no other record.
+func TestHealthRequestsWriteNothingToTheLog(t *testing.T) {
+	for _, path := range []string{"/health/startup", "/health/live", "/health/ready", "/health/ready?probe=1"} {
+		t.Run(path, func(t *testing.T) {
+			router, spans, logs := newTestRouter(t, gin.ReleaseMode)
+			before := logs.count()
+
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+
+			if response.Code != http.StatusOK || response.Body.String() != "Healthy" {
+				t.Fatalf("expected 200 Healthy, got %d %q", response.Code, response.Body.String())
+			}
+			if written := logs.count() - before; written != 0 {
+				t.Errorf("a call to %s wrote %d records", path, written)
+			}
+			if recorded := len(spans.GetSpans()); recorded != 0 {
+				t.Errorf("a call to %s recorded %d spans", path, recorded)
+			}
+		})
+	}
+}
+
+// Only the three health addresses are left out: an address that merely starts
+// like one keeps its request line and its span.
+func TestAddressNextToAHealthAddressIsStillLogged(t *testing.T) {
+	router, spans, logs := newTestRouter(t, gin.ReleaseMode)
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health/readyz", nil))
+
+	requestRecord := logs.find(t, "HTTP request")
+	if path := attribute(t, requestRecord, "RequestPath").AsString(); path != "/health/readyz" {
+		t.Errorf("expected the request line for /health/readyz, got %q", path)
+	}
+	requestSpan(t, spans)
 }
