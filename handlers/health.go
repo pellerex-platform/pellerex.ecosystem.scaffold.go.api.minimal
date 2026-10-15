@@ -1,130 +1,69 @@
 package handlers
 
 import (
-	"log/slog"
 	"net/http"
-	"os"
-	"time"
 
-	"RepoUniqueNormalisedIdentifier/config"
-	"RepoUniqueNormalisedIdentifier/secrets"
+	"RepoUniqueNormalisedIdentifier/health"
 
 	"github.com/gin-gonic/gin"
 )
 
-// HealthResponse represents the structure of health check responses
-type HealthResponse struct {
-	Status    string                 `json:"status"`
-	Timestamp string                 `json:"timestamp"`
-	Service   string                 `json:"service"`
-	Version   string                 `json:"version"`
-	Details   map[string]interface{} `json:"details,omitempty"`
-}
+// The one-word answers of the health addresses. Anyone can call them, so they say
+// only healthy or not: what failed and why goes to the health test's log line.
+// The words are ASP.NET Core's own, which the .NET scaffold answers with, so an app
+// answers the same in every language.
+const (
+	healthyAnswer   = "Healthy"
+	unhealthyAnswer = "Unhealthy"
+)
 
 // StartupHealthCheck handles startup health checks
 // @Summary Startup health check
-// @Description Checks if the application has started successfully
+// @Description Healthy once the first health test has finished, whatever it found
 // @Tags Health
-// @Produce json
-// @Success 200 {object} HealthResponse
+// @Produce plain
+// @Success 200 {string} string "Healthy"
+// @Failure 503 {string} string "Unhealthy"
 // @Router /health/startup [get]
-func StartupHealthCheck(cfg *config.Config, logger *slog.Logger) gin.HandlerFunc {
+func StartupHealthCheck(tester *health.Tester) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Startup check - verify all critical components are initialized
-		details := map[string]interface{}{
-			"startTime": time.Now().Add(-time.Since(time.Now())).Format(time.RFC3339),
-			"uptime":    time.Since(time.Now()).Seconds(),
-			"pid":       os.Getpid(),
-		}
-
-		response := HealthResponse{
-			Status:    "started",
-			Timestamp: time.Now().Format(time.RFC3339),
-			Service:   "RepoUniqueNormalisedIdentifier",
-			Version:   "1.0.0",
-			Details:   details,
-		}
-
-		logger.DebugContext(c.Request.Context(), "Startup health check accessed")
-		c.JSON(http.StatusOK, response)
+		answer(c, tester.Started())
 	}
 }
 
 // LivenessHealthCheck handles liveness health checks
 // @Summary Liveness health check
-// @Description Checks if the application is alive and responsive
+// @Description Healthy when the last health test passed
 // @Tags Health
-// @Produce json
-// @Success 200 {object} HealthResponse
+// @Produce plain
+// @Success 200 {string} string "Healthy"
+// @Failure 503 {string} string "Unhealthy"
 // @Router /health/live [get]
-func LivenessHealthCheck(cfg *config.Config, logger *slog.Logger) gin.HandlerFunc {
+func LivenessHealthCheck(tester *health.Tester) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Liveness check - basic responsiveness (no external dependencies)
-		response := HealthResponse{
-			Status:    "alive",
-			Timestamp: time.Now().Format(time.RFC3339),
-			Service:   "RepoUniqueNormalisedIdentifier",
-			Version:   "1.0.0",
-		}
-
-		logger.DebugContext(c.Request.Context(), "Liveness health check accessed")
-		c.JSON(http.StatusOK, response)
+		answer(c, tester.Healthy())
 	}
 }
 
 // ReadinessHealthCheck handles readiness health checks
 // @Summary Readiness health check
-// @Description Checks if the application is ready to serve traffic
+// @Description Healthy when the last health test passed
 // @Tags Health
-// @Produce json
-// @Success 200 {object} HealthResponse
-// @Success 503 {object} HealthResponse
+// @Produce plain
+// @Success 200 {string} string "Healthy"
+// @Failure 503 {string} string "Unhealthy"
 // @Router /health/ready [get]
-func ReadinessHealthCheck(cfg *config.Config, logger *slog.Logger) gin.HandlerFunc {
+func ReadinessHealthCheck(tester *health.Tester) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Readiness check - verify dependencies and configuration
-		isReady := true
-		details := make(map[string]interface{})
-
-		// Check configuration
-		if cfg == nil {
-			isReady = false
-			details["configuration"] = "failed"
-		} else {
-			details["configuration"] = "ok"
-		}
-
-		// Check secrets availability (non-blocking). LoadSecrets never returns nil,
-		// so report on the DbConnectionString content, not the struct pointer —
-		// "loaded" must mean the Key Vault secret actually arrived on the mount.
-		if secrets.HasDatabaseSecret(cfg.Secrets) {
-			details["secret_mount"] = "loaded"
-		} else {
-			details["secret_mount"] = "absent"
-			// Note: We don't mark as not ready for secrets in minimal scaffold
-		}
-
-		// Check environment configuration
-		details["environment"] = cfg.Environment
-		details["port"] = cfg.Port
-
-		status := "ready"
-		httpStatus := http.StatusOK
-
-		if !isReady {
-			status = "not_ready"
-			httpStatus = http.StatusServiceUnavailable
-		}
-
-		response := HealthResponse{
-			Status:    status,
-			Timestamp: time.Now().Format(time.RFC3339),
-			Service:   "RepoUniqueNormalisedIdentifier",
-			Version:   "1.0.0",
-			Details:   details,
-		}
-
-		logger.DebugContext(c.Request.Context(), "Readiness health check accessed", "ready", isReady)
-		c.JSON(httpStatus, response)
+		answer(c, tester.Healthy())
 	}
+}
+
+// answer writes the one-word answer: 200 Healthy, or 503 Unhealthy.
+func answer(c *gin.Context, healthy bool) {
+	if healthy {
+		c.String(http.StatusOK, healthyAnswer)
+		return
+	}
+	c.String(http.StatusServiceUnavailable, unhealthyAnswer)
 }
