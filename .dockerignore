@@ -14,6 +14,9 @@ LICENSE
 
 # Deployment / tooling (Helm chart, pipelines, scripts) — not part of the binary
 **/infrastructure
+# Except the chart, which the chart test (chart_test.go) reads when the unit tests run in
+# the Dockerfile's unit-tests stage
+!infrastructure/Helm/
 **/start
 Dockerfile*
 

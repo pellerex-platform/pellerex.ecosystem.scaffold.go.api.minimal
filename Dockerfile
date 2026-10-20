@@ -20,6 +20,34 @@ COPY . .
 # reproducible artifact — GO-D15)
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o main .
 
+# Unit test stage: the unit tests with coverage, on the build stage's source and toolchain.
+# The build runs it by building the unit-test-results target before the image. The default
+# build never runs it, because the runtime stage stays last.
+FROM builder AS unit-tests
+
+# Go's own tools write neither JUnit nor Cobertura XML: gotestsum (Apache-2.0) writes the
+# JUnit file and gocover-cobertura (MIT) converts Go's coverage profile.
+RUN go install gotest.tools/gotestsum@v1.13.0 \
+    && go install github.com/boumenot/gocover-cobertura@v1.5.0
+
+# This RUN always succeeds, so the results are kept when a test fails: the test command's
+# exit code goes into a file instead, and the build stops after uploading the results when
+# it is not 0. A coverage file that cannot be made is removed rather than left half written,
+# so the test results are still read, without coverage. Coverage counts every line any test
+# runs, whichever package the test is in (-coverpkg=./...), as in the other languages, and
+# only lines that hold code count as lines (-ignore-non-code-lines leaves out blank lines,
+# comments and closing braces).
+RUN mkdir -p /unit-test-results/test-coverage/unit-tests /unit-test-results/test-coverage/coverage; \
+    gotestsum --junitfile /unit-test-results/test-coverage/unit-tests/junit.xml -- -coverpkg=./... -coverprofile=/tmp/coverage.out ./...; \
+    echo "$?" > /unit-test-results/unit-tests-exit-code; \
+    gocover-cobertura -ignore-non-code-lines < /tmp/coverage.out > /unit-test-results/test-coverage/coverage/cobertura.xml \
+        || rm -f /unit-test-results/test-coverage/coverage/cobertura.xml
+
+# Only the results, so exporting this target gives test-coverage/ and unit-tests-exit-code
+# at the root of the export folder.
+FROM scratch AS unit-test-results
+COPY --from=unit-tests /unit-test-results /
+
 # Runtime stage
 FROM alpine:3.20
 

@@ -338,10 +338,12 @@ ENVIRONMENT=production PORT=8080 ./start/run-docker.sh
 # Run all tests
 go test ./...
 
-# Run tests with coverage
-go test -v ./... -coverprofile=coverage.out
+# Run tests with coverage, counting every line any test runs (as the build does)
+go test -v ./... -coverpkg=./... -coverprofile=coverage.out
 go tool cover -html=coverage.out -o coverage.html
 ```
+
+Every build, on GitHub and on Azure DevOps, runs these tests in the Dockerfile's `unit-tests` stage and keeps their results (JUnit XML) and line coverage (Cobertura XML) as the `test-coverage` artifact, which Pellerex shows on the app's Test Coverage tab. A failing test stops the build, so no image is published.
 
 ### Manual Testing
 ```bash
