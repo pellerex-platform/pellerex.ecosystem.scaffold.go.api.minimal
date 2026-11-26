@@ -78,7 +78,6 @@ The API will be available at:
 - **API:** http://localhost:<port-number>
 - **Health Check:** http://localhost:<port-number>/health/startup
 - **Sample Endpoint:** http://localhost:<port-number>/v1/hello
-- **Swagger Documentation:** http://localhost:<port-number>/swagger/index.html
 
 **Backward Compatibility:**
 - http://localhost:<port-number>/api/health/startup
@@ -97,7 +96,7 @@ The API will be available at:
 - **Go + Gin Framework** - High-performance HTTP framework
 - **Secret management system** - Local file and cloud-ready
 - **Health checks** - Startup, liveness, readiness endpoints
-- **API documentation** - Swagger/OpenAPI integration
+- **API description** - a static OpenAPI file (`openapi.yaml`) at the repository root, not served at runtime
 - **CORS support** - Cross-origin resource sharing
 - **Structured JSON logging** - Production-grade logging
 - **Graceful shutdown** - Clean application termination
@@ -285,9 +284,9 @@ Returns hello message with configuration information.
 }
 ```
 
-### Interactive Documentation
-- **Swagger UI:** http://localhost:<port-number>/swagger/index.html
-- **OpenAPI Spec:** http://localhost:<port-number>/swagger/doc.json
+### API Description
+- **OpenAPI file:** `openapi.yaml` at the repository root, where the Pellerex Standards scan looks for it. Keep it in step with the handlers under `handlers/`.
+- **Not served at runtime:** the API has no documentation page and no address that returns this file.
 
 ## ⚙️ Configuration
 
@@ -537,7 +536,6 @@ curl http://localhost:<port-number>/v1/hello
 | Health Check | `/health/live` | Liveness probe |
 | Health Check | `/health/ready` | Readiness probe |
 | API | `/v1/hello` | Sample API endpoint |
-| Swagger | `/swagger/index.html` | API documentation |
 
 **Environment Configuration:**
 - `ENVIRONMENT`: development, test, production
@@ -553,7 +551,7 @@ With **pellerex**, it only takes less than 2 minutes for your APIs to be up and 
 **pellerex** provides your teams with the below capabilities out of the box:
 - API scaffolds built in a variety of languages currently Python and .NET
 - Versioning of the APIs
-- Route documentation provided using Swagger
+- Route documentation in a static OpenAPI file (`openapi.yaml`) kept in the repository
 - Codified configuration management across all different environments
 - Secret management backed by secure key-vaults
 - Protected endpoints and integration with Pellerex Identity Service
