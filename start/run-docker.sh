@@ -88,7 +88,6 @@ if [ $? -eq 0 ]; then
     echo -e "${GREEN}  API: http://localhost:$PORT${NC}"
     echo -e "${GREEN}  Health: http://localhost:$PORT/health/startup${NC}"
     echo -e "${GREEN}  Hello: http://localhost:$PORT/v1/hello${NC}"
-    echo -e "${GREEN}  Swagger: http://localhost:$PORT/swagger/index.html${NC}"
     echo ""
     echo -e "${YELLOW}📊 Useful commands:${NC}"
     echo -e "${YELLOW}  View logs: docker logs $CONTAINER_NAME${NC}"
